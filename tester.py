@@ -1,51 +1,75 @@
 import os
 import tweepy
-import openai
+import requests
+from requests.structures import CaseInsensitiveDict
 
-# Authenticate with Twitter API
-auth = tweepy.OAuth2BearerHandler(os.environ['BEARER_TOKEN'])
+
+# Authenticate to Twitter
+auth = tweepy.OAuth2BearerHandler(os.environ['TWITTER_BEARER_TOKEN'])
 api = tweepy.API(auth)
 
-# Authenticate with OpenAI API
-openai.api_key = os.environ['OPENAI_API_KEY']
+# Set up ChatGPT API credentials
+headers = CaseInsensitiveDict()
+headers["Content-Type"] = "application/json"
+headers["Authorization"] = f"Bearer {os.environ['OPENAI_API_SECRET_KEY']}"
 
-# Generate clown response
-def generate_clown_response(message):
-    prompt = f"Clown-themed response to: {message}"
-    response = openai.Completion.create(
-        engine="davinci",
-        prompt=prompt,
-        temperature=0.7,
-        max_tokens=50,
-        n=1,
-        stop=None,
-        timeout=10,
-    )
-    return response.choices[0].text.strip()
+def generate_response(prompt):
+    data = """
+    {
+        """
+    data += f'"prompt": "{prompt}",'
+    data += """
+        "temperature": 0.7,
+        "max_tokens": 60,
+        "top_p": 1,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+    }
+    """
 
-# Stream listener to respond to DMs and mentions
+    resp = requests.post("https://api.openai.com/v1/engines/davinci-codex/completions", headers=headers, data=data)
+
+    if resp.status_code != 200:
+        raise ValueError("Failed to generate response from ChatGPT API")
+
+    response_text = resp.json()["choices"][0]["text"].strip()
+    return response_text
+
+# Create a stream listener
 class MyStreamListener(tweepy.StreamListener):
     def on_status(self, status):
-        if status.author.id == api.me().id:
-            return
-        if status.in_reply_to_status_id is not None or 'media' in status.entities:
-            return
-        if status.in_reply_to_screen_name == api.me().screen_name:
-            response = generate_clown_response(status.text)
-            api.update_status(
-                status=response,
-                in_reply_to_status_id=status.id,
-                auto_populate_reply_metadata=True
-            )
-        elif hasattr(status, 'direct_message'):
-            message = status.direct_message['text']
-            response = generate_clown_response(message)
-            api.send_direct_message(
-                user_id=status.direct_message['sender_id'],
-                text=response
-            )
+        # Check if the tweet is a mention and not a retweet
+        if status.in_reply_to_screen_name == 'HobbleStepN' and not status.retweeted:
+            # Extract the text of the tweet
+            text = status.text.lower()
+            
+            # Generate a clown-themed response using ChatGPT API
+            prompt = f"clown response to {text}"
+            response = generate_response(prompt)
+            reply_text = f"@{status.author.screen_name} {response}"
+            
+            # Post the response as a reply to the original tweet
+            api.update_status(status=reply_text, in_reply_to_status_id=status.id)
+            
+        # Check if the tweet is a direct message
+        elif status.in_reply_to_screen_name is None:
+            # Extract the text of the direct message
+            text = status.text.lower()
+            
+            # Generate a clown-themed response using ChatGPT API
+            prompt = f"clown response to {text}"
+            response = generate_response(prompt)
+            
+            # Send the response as a direct message
+            api.send_direct_message(status.author.id, text=response)
 
-# Start streaming
-stream_listener = MyStreamListener()
-stream = tweepy.Stream(auth=api.auth, listener=stream_listener)
-stream.filter(track=[api.me().screen_name])
+    def on_error(self, status_code):
+        print(f"Error: {status_code}")
+
+# Create a stream
+myStreamListener = MyStreamListener()
+myStream = tweepy.Stream(auth = api.auth, listener=myStreamListener)
+
+# Start the stream
+myStream.filter(track=['HobbleStepN'])
+
