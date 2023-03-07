@@ -40,7 +40,7 @@ def handle_mention(tweet):
     api.update_status(f"@{username} {response_text}", tweet.id)
 
 # Set up stream listener to listen for mentions
-class MyStream(tweepy.Stream):
+class MyStreamListener(tweepy.StreamListener):
     def on_status(self, status):
         if status.in_reply_to_status_id is not None or status.user.id == api.me().id:
             return
@@ -57,6 +57,14 @@ class MyStream(tweepy.Stream):
             return False
 
 # Set up stream listener and start listening for mentions
-myStream = MyStream(auth = api.auth, listener=None)
+myStreamListener = MyStreamListener()
+myStream = MyStream(
+    consumer_key=consumer_key,
+    consumer_secret=consumer_secret,
+    access_token=access_token,
+    access_token_secret=access_token_secret,
+    listener=myStreamListener
+)
 myStream.filter(track=['@YOUR_USERNAME'])
+
 
