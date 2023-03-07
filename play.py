@@ -60,4 +60,4 @@ class MyStreamListener(tweepy.Stream):
 myStreamListener = MyStreamListener(
     consumer_key, consumer_secret, access_token, access_token_secret
 )
-myStreamListener.filter(track=['@YOUR_USERNAME'])
+myStreamListener.filter(track=['@HobbleStepN'])
