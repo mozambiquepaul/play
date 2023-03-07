@@ -1,19 +1,25 @@
 import tweepy
 
-# Fill in your own keys and secrets
-consumer_key = "your_consumer_key"
-consumer_secret = "your_consumer_secret"
-access_token = "your_access_token"
-access_token_secret = "your_access_token_secret"
+# Replace the placeholders with your own values
+consumer_key = 'CONSUMER_KEY'
+consumer_secret = 'CONSUMER_SECRET'
+access_token = 'ACCESS_TOKEN'
+access_token_secret = 'ACCESS_TOKEN_SECRET'
+client_id = 'OAUTH2_CLIENT_ID'
+client_secret = 'OAUTH2_CLIENT_SECRET'
 
-# Authenticate with Tweepy
-auth = tweepy.OAuth1UserHandler(
-    consumer_key, consumer_secret, access_token, access_token_secret)
+auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
+auth.set_access_token(access_token, access_token_secret)
+auth.apply_auth()
 
-# Test authentication by retrieving your user timeline
+# Add OAuth 2.0 client credentials to auth object
+auth.set_client(client_id, client_secret)
+
 api = tweepy.API(auth)
-timeline = api.user_timeline(count=10)
 
-# Print out the tweet text from your user timeline
-for tweet in timeline:
-    print(tweet.text)
+# Test authentication
+try:
+    user = api.verify_credentials()
+    print('Authentication successful')
+except tweepy.TweepError as e:
+    print(f'Error: {e}')
