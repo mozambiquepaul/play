@@ -26,7 +26,13 @@ def generate_response(prompt):
 # Define function to handle DMs
 class DMListener(tweepy.Stream):
     def __init__(self):
-        super().__init__(auth=api.auth, listener=self)
+        super().__init__(
+            os.environ['TWITTER_CONSUMER_KEY'],
+            os.environ['TWITTER_CONSUMER_SECRET'],
+            os.environ['TWITTER_ACCESS_TOKEN'],
+            os.environ['TWITTER_ACCESS_TOKEN_SECRET'],
+            listener=self
+        )
 
     def on_connect(self):
         print("Connected to Twitter API for DMs.")
@@ -44,7 +50,13 @@ class DMListener(tweepy.Stream):
 # Define function to handle mentions
 class MentionListener(tweepy.Stream):
     def __init__(self):
-        super().__init__(auth=api.auth, listener=self)
+        super().__init__(
+            os.environ['TWITTER_CONSUMER_KEY'],
+            os.environ['TWITTER_CONSUMER_SECRET'],
+            os.environ['TWITTER_ACCESS_TOKEN'],
+            os.environ['TWITTER_ACCESS_TOKEN_SECRET'],
+            listener=self
+        )
 
     def on_connect(self):
         print("Connected to Twitter API for mentions.")
@@ -70,4 +82,3 @@ dm_listener.filter(track=["direct_message"])
 mention_listener.filter(track=["@HobbleStepN"])
 
 print("Listening for DMs and mentions...")
-
