@@ -5,7 +5,7 @@ import re
 
 # Authenticate to Twitter
 bearer_token = os.environ['TWITTER_BEARER_TOKEN']
-auth = tweepy.OAuth2BearerToken(bearer_token)
+auth = tweepy.OAuth2BearerHandler(bearer_token)
 api = tweepy.API(auth)
 
 # Authenticate to OpenAI
@@ -70,3 +70,4 @@ dm_listener.filter(track=["direct_message"])
 mention_listener.filter(track=["@HobbleStepN"])
 
 print("Listening for DMs and mentions...")
+
