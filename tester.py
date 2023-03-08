@@ -1,5 +1,6 @@
 import tweepy
 import openai
+import os
 import re
 
 # Authenticate to Twitter
