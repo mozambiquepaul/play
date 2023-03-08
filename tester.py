@@ -1,75 +1,53 @@
 import os
 import tweepy
-import requests
-from requests.structures import CaseInsensitiveDict
+import openai
+from dotenv import load_dotenv
 
+load_dotenv()
 
 # Authenticate to Twitter
 auth = tweepy.OAuth2BearerHandler(os.environ['TWITTER_BEARER_TOKEN'])
 api = tweepy.API(auth)
 
-# Set up ChatGPT API credentials
-headers = CaseInsensitiveDict()
-headers["Content-Type"] = "application/json"
-headers["Authorization"] = f"Bearer {os.environ['OPENAI_API_SECRET_KEY']}"
+# Authenticate to OpenAI
+openai.api_key = os.environ['OPENAI_API_SECRET_KEY']
 
-def generate_response(prompt):
-    data = """
-    {
-        """
-    data += f'"prompt": "{prompt}",'
-    data += """
-        "temperature": 0.7,
-        "max_tokens": 60,
-        "top_p": 1,
-        "frequency_penalty": 0,
-        "presence_penalty": 0
-    }
-    """
-
-    resp = requests.post("https://api.openai.com/v1/engines/davinci-codex/completions", headers=headers, data=data)
-
-    if resp.status_code != 200:
-        raise ValueError("Failed to generate response from ChatGPT API")
-
-    response_text = resp.json()["choices"][0]["text"].strip()
-    return response_text
-
-# Create a stream listener
-class MyStreamListener(tweepy.StreamListener):
+# Define the stream listener
+class MyStreamListener(tweepy.Stream):
     def on_status(self, status):
-        # Check if the tweet is a mention and not a retweet
-        if status.in_reply_to_screen_name == 'HobbleStepN' and not status.retweeted:
-            # Extract the text of the tweet
-            text = status.text.lower()
-            
-            # Generate a clown-themed response using ChatGPT API
-            prompt = f"clown response to {text}"
-            response = generate_response(prompt)
-            reply_text = f"@{status.author.screen_name} {response}"
-            
-            # Post the response as a reply to the original tweet
-            api.update_status(status=reply_text, in_reply_to_status_id=status.id)
-            
-        # Check if the tweet is a direct message
-        elif status.in_reply_to_screen_name is None:
-            # Extract the text of the direct message
-            text = status.text.lower()
-            
-            # Generate a clown-themed response using ChatGPT API
-            prompt = f"clown response to {text}"
-            response = generate_response(prompt)
-            
-            # Send the response as a direct message
-            api.send_direct_message(status.author.id, text=response)
+        print(status.text)
 
-    def on_error(self, status_code):
-        print(f"Error: {status_code}")
+# Start the stream listener
+myStreamListener = MyStreamListener(api_key, api_secret, access_token, access_token_secret)
+myStreamListener.filter(track=['@HobbleStepN'])
 
-# Create a stream
-myStreamListener = MyStreamListener()
-myStream = tweepy.Stream(auth = api.auth, listener=myStreamListener)
+# Define a function to generate a response
+def generate_response(tweet_text):
+    response = openai.Completion.create(
+        engine="text-davinci-002",
+        prompt=tweet_text,
+        max_tokens=50,
+        n=1,
+        stop=None,
+        temperature=0.7,
+    )
+    return response.choices[0].text
 
-# Start the stream
-myStream.filter(track=['HobbleStepN'])
+# Define a function to send a reply tweet
+def send_reply_tweet(tweet, response_text):
+    api.update_status(
+        status=response_text,
+        in_reply_to_status_id=tweet.id,
+        auto_populate_reply_metadata=True,
+    )
 
+# Define the stream listener
+class MyStreamListener(tweepy.Stream):
+    def on_status(self, status):
+        if status.in_reply_to_screen_name == 'HobbleStepN':
+            response_text = generate_response(status.text)
+            send_reply_tweet(status, response_text)
+
+# Start the stream listener
+myStreamListener = MyStreamListener(api_key, api_secret, access_token, access_token_secret)
+myStreamListener.filter(track=['@HobbleStepN'])
