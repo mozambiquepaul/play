@@ -1,63 +1,48 @@
-import os
 import tweepy
 import openai
-from tweepy import Stream, OAuth2BearerHandler
-from tweepy import StreamListener
+import os
 
-# Twitter API credentials
-CONSUMER_KEY = os.environ.get("TWITTER_CONSUMER_KEY")
-CONSUMER_SECRET = os.environ.get("TWITTER_CONSUMER_SECRET")
-ACCESS_TOKEN = os.environ.get("TWITTER_ACCESS_TOKEN")
-ACCESS_TOKEN_SECRET = os.environ.get("TWITTER_ACCESS_TOKEN_SECRET")
-
-# OpenAI API credentials
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-
-# Authenticate with Twitter API
-auth = tweepy.OAuth2BearerHandler(CONSUMER_KEY, CONSUMER_SECRET)
+# Twitter OAuth 2.0 authentication
+auth = tweepy.OAuth2BearerHandler(os.environ.get("TWITTER_BEARER_TOKEN"))
 api = tweepy.API(auth)
 
-# Authenticate with OpenAI API
-openai.api_key = OPENAI_API_KEY
+# OpenAI API authentication
+openai.api_key = os.environ.get("OPENAI_API_KEY")
 
-# Define a listener to handle incoming DMs and mentions
-class ClownStreamListener(StreamListener):
-    
+# Function to generate clown-themed responses
+def generate_response(text):
+    prompt = "You say: " + text + "\nClown response:"
+    response = openai.Completion.create(
+        engine="davinci",
+        prompt=prompt,
+        max_tokens=1024,
+        temperature=0.7,
+    )
+    return response.choices[0].text.strip()
+
+# Tweepy Stream object to listen for direct messages and mentions
+class MyStreamListener(tweepy.Stream):
+    def __init__(self):
+        super().__init__(auth=api.auth, listener=self)
+
     def on_direct_message(self, status):
-        # Generate a response to the DM using OpenAI
-        response = openai.Completion.create(
-            engine="davinci",
-            prompt=status.message_create["message_data"]["text"],
-            temperature=0.5,
-            max_tokens=100,
-            n=1,
-            stop=None,
-            )
-        
-        # Send the generated response back to the user
-        user_id = status.message_create["sender_id"]
-        api.send_direct_message(user_id, text=response.choices[0].text)
-        
+        text = status.message_create["message_data"]["text"]
+        sender_id = status.message_create["sender_id"]
+        response_text = generate_response(text)
+        api.send_direct_message(sender_id, text=response_text)
+
     def on_status(self, status):
-        # Check if the tweet mentions our username
-        if api.get_user(status.user.id_str).screen_name == "HobbleStepN":
-            # Generate a response to the tweet using OpenAI
-            response = openai.Completion.create(
-                engine="davinci",
-                prompt=status.text,
-                temperature=0.5,
-                max_tokens=100,
-                n=1,
-                stop=None,
-                )
-            
-            # Send the generated response back to the user
+        text = status.text
+        username = status.user.screen_name
+        if f"@{username}" in text:
+            response_text = generate_response(text)
             api.update_status(
-                status="@" + status.user.screen_name + " " + response.choices[0].text,
-                in_reply_to_status_id=status.id_str,
+                status=response_text,
+                in_reply_to_status_id=status.id,
+                auto_populate_reply_metadata=True,
             )
 
-# Create a stream to listen for incoming DMs and mentions
-stream_listener = ClownStreamListener()
-stream = Stream(auth, stream_listener)
-stream.filter(track=["@HobbleStepN"], is_async=True)
+# Start the Tweepy Stream
+stream_listener = MyStreamListener()
+stream_listener.filter(track=[f"@{api.me().screen_name}"], is_async=True)
+
