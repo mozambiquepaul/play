@@ -1,84 +1,66 @@
+import os
 import tweepy
 import openai
-import os
 import re
+from tweepy import Stream
+from tweepy.streaming import Stream
+from tweepy import OAuth2BearerHandler
 
-# Authenticate to Twitter
+# Set up Twitter API authentication
 bearer_token = os.environ['TWITTER_BEARER_TOKEN']
-auth = tweepy.OAuth2BearerHandler(bearer_token)
+auth = OAuth2BearerHandler(bearer_token)
 api = tweepy.API(auth)
 
-# Authenticate to OpenAI
+# Set up OpenAI API authentication
 openai.api_key = os.environ['OPENAI_API_KEY']
 
-# Define function to generate clown-themed response using OpenAI API
-def generate_response(prompt):
-    response = openai.Completion.create(
-        engine="davinci",
-        prompt=prompt,
-        max_tokens=1024,
-        n=1,
-        stop=None,
-        temperature=0.5,
-    )
-    return response.choices[0].text.strip()
-
-# Define function to handle DMs
+# Define a listener for DMs
 class DMListener(tweepy.Stream):
     def __init__(self):
-        super().__init__(
-            os.environ['TWITTER_CONSUMER_KEY'],
-            os.environ['TWITTER_CONSUMER_SECRET'],
-            os.environ['TWITTER_ACCESS_TOKEN'],
-            os.environ['TWITTER_ACCESS_TOKEN_SECRET'],
-            listener=self
-        )
+        super().__init__(auth=auth, async=True)
 
-    def on_connect(self):
-        print("Connected to Twitter API for DMs.")
+    def on_data(self, raw_data):
+        data = json.loads(raw_data)
+        if 'direct_message' in data:
+            message = data['direct_message']['text']
+            sender_id = data['direct_message']['sender_id']
+            response = generate_response(message)
+            send_direct_message(response, sender_id)
 
-    def on_direct_message(self, status):
-        if status.direct_message.sender_id != api.me().id:
-            # Only respond to DMs sent by others
-            user = api.get_user(status.direct_message.sender_id)
-            screen_name = user.screen_name
-            text = status.direct_message.text
-            prompt = f"I'm a clown, {screen_name}. {text}"
-            response = generate_response(prompt)
-            api.send_direct_message(recipient_id=user.id, text=response)
+    def on_error(self, status_code):
+        print(f"DMListener Error: {status_code}")
+        return False
 
-# Define function to handle mentions
+# Define a listener for mentions
 class MentionListener(tweepy.Stream):
     def __init__(self):
-        super().__init__(
-            os.environ['TWITTER_CONSUMER_KEY'],
-            os.environ['TWITTER_CONSUMER_SECRET'],
-            os.environ['TWITTER_ACCESS_TOKEN'],
-            os.environ['TWITTER_ACCESS_TOKEN_SECRET'],
-            listener=self
-        )
+        super().__init__(auth=auth, async=True)
 
-    def on_connect(self):
-        print("Connected to Twitter API for mentions.")
+    def on_data(self, raw_data):
+        data = json.loads(raw_data)
+        if 'text' in data:
+            message = data['text']
+            sender_id = data['user']['id_str']
+            response = generate_response(message)
+            send_direct_message(response, sender_id)
 
-    def on_status(self, status):
-        if status.in_reply_to_user_id == api.me().id:
-            # Only respond to mentions of my username
-            user = api.get_user(status.user.id)
-            screen_name = user.screen_name
-            text = status.text
-            prompt = f"I'm a clown, {screen_name}. {text}"
-            response = generate_response(prompt)
-            api.update_status(
-                status=response,
-                in_reply_to_status_id=status.id,
-                auto_populate_reply_metadata=True,
-            )
+    def on_error(self, status_code):
+        print(f"MentionListener Error: {status_code}")
+        return False
+
+# Define function to generate a response using OpenAI
+def generate_response(message):
+    # Add your OpenAI API code here to generate a response based on the message
+    response = "This is the response from OpenAI."
+    return response
+
+# Define function to send a direct message
+def send_direct_message(message, recipient_id):
+    api.send_direct_message(recipient_id, message)
 
 # Start listening for DMs and mentions
 dm_listener = DMListener()
-mention_listener = MentionListener()
-dm_listener.filter(track=["direct_message"])
-mention_listener.filter(track=["@HobbleStepN"])
+dm_listener.filter(track=['@HobbleStepN'])
 
-print("Listening for DMs and mentions...")
+mention_listener = MentionListener()
+mention_listener.filter(track=['@HobbleStepN'])
