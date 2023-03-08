@@ -45,4 +45,5 @@ def send_dm(screen_name, text):
 
 # Start the listener
 listener = ClownBotListener(consumer_key, consumer_secret, access_token, access_token_secret)
-listener.filter(track=["@HobbleStepN"], is_async=True)
+listener.filter(track=["@HobbleStepN"], threaded=True)
+
