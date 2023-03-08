@@ -17,6 +17,11 @@ api = tweepy.API(auth)
 
 # set up listener for incoming DMs and mentions
 class ClownListener(tweepy.Stream):
+    def __init__(self, auth, api, access_token, access_token_secret):
+        super().__init__(auth, api)
+        self.access_token = access_token
+        self.access_token_secret = access_token_secret
+
     def on_status(self, status):
         # check if mention includes @HobbleStepN
         if "@HobbleStepN" in status.text:
@@ -46,6 +51,10 @@ class ClownListener(tweepy.Stream):
             )
             # post response as a DM
             api.send_direct_message(status.user.id, f"{response.choices[0].text}")
+
+# set up Tweepy API client
+auth = tweepy.OAuth2BearerHandler(access_token)
+api = tweepy.API(auth)
 
 # start Tweepy stream
 stream = ClownListener(auth, api)
