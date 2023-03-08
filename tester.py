@@ -1,48 +1,47 @@
 import tweepy
 import openai
-import os
+import re
 
-# Twitter OAuth 2.0 authentication
-auth = tweepy.OAuth2BearerHandler(os.environ.get("TWITTER_BEARER_TOKEN"))
+# Authenticate to Twitter
+auth = tweepy.OAuth2BearerHandler(access_token=os.environ['TWITTER_ACCESS_TOKEN'])
+
+# Create API object
 api = tweepy.API(auth)
 
-# OpenAI API authentication
-openai.api_key = os.environ.get("OPENAI_API_KEY")
+# Authenticate to OpenAI
+openai.api_key = os.environ['OPENAI_API_KEY']
 
-# Function to generate clown-themed responses
-def generate_response(text):
-    prompt = "You say: " + text + "\nClown response:"
+# Define function to generate clown-themed responses using OpenAI's GPT-3
+def generate_response(prompt):
     response = openai.Completion.create(
-        engine="davinci",
-        prompt=prompt,
-        max_tokens=1024,
-        temperature=0.7,
+      engine="text-davinci-002",
+      prompt=prompt,
+      max_tokens=1024,
+      n=1,
+      stop=None,
+      temperature=0.5,
     )
     return response.choices[0].text.strip()
 
-# Tweepy Stream object to listen for direct messages and mentions
+# Define function to handle incoming DMs and @mentions
 class MyStreamListener(tweepy.Stream):
-    def __init__(self):
+    def __init__(self, api):
         super().__init__(auth=api.auth, listener=self)
 
     def on_direct_message(self, status):
-        text = status.message_create["message_data"]["text"]
-        sender_id = status.message_create["sender_id"]
-        response_text = generate_response(text)
-        api.send_direct_message(sender_id, text=response_text)
+        sender_id = status.direct_message.sender_id_str
+        message_text = status.direct_message.text
+        response_text = generate_response(message_text)
+        api.send_direct_message(sender_id, response_text)
 
     def on_status(self, status):
-        text = status.text
-        username = status.user.screen_name
-        if f"@{username}" in text:
-            response_text = generate_response(text)
-            api.update_status(
-                status=response_text,
-                in_reply_to_status_id=status.id,
-                auto_populate_reply_metadata=True,
-            )
+        if re.search(r'@HobbleStepN', status.text):
+            message_text = status.text
+            response_text = generate_response(message_text)
+            api.update_status(f"@{status.user.screen_name} {response_text}", status.id_str)
 
-# Start the Tweepy Stream
-stream_listener = MyStreamListener()
-stream_listener.filter(track=[f"@{api.me().screen_name}"], is_async=True)
+# Set up the stream listener
+myStreamListener = MyStreamListener(api)
+myStreamListener.filter(track=['@HobbleStepN'], is_async=True)
+
 
