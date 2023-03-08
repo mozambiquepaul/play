@@ -5,49 +5,60 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Authenticate to Twitter
+# Authenticate to Twitter API
 auth = tweepy.OAuth2BearerHandler(os.environ['TWITTER_BEARER_TOKEN'])
 api = tweepy.API(auth)
 
-# Authenticate to OpenAI
+# Authenticate to OpenAI API
 openai.api_key = os.environ['OPENAI_API_SECRET_KEY']
 
-# Define the stream listener
-class MyStreamListener(tweepy.Stream):
+
+class MyStreamListener(tweepy.StreamListener):
     def on_status(self, status):
-        print(status.text)
+        if status.user.id != api.me().id: # Ignore tweets from self
+            tweet_id = status.id
+            username = status.user.screen_name
+            context = status.text
 
-# Start the stream listener
-myStreamListener = MyStreamListener(api_key, api_secret, access_token, access_token_secret)
-myStreamListener.filter(track=['@HobbleStepN'])
+            # Check if tweet is a mention
+            if f"@{api.me().screen_name}" in context:
+                response = generate_response(context)
+                api.update_status(
+                    status=response,
+                    in_reply_to_status_id=tweet_id,
+                    auto_populate_reply_metadata=True
+                )
 
-# Define a function to generate a response
-def generate_response(tweet_text):
+            # Check if tweet is a DM
+            elif status.in_reply_to_screen_name is None:
+                response = generate_response(context)
+                api.send_direct_message(
+                    recipient_id=status.user.id,
+                    text=response
+                )
+
+    def on_error(self, status_code):
+        if status_code == 420:
+            return False
+
+
+def generate_response(context):
+    # Get AI-generated response
+    prompt = f"Clown responds to {context}\nClown:"
     response = openai.Completion.create(
-        engine="text-davinci-002",
-        prompt=tweet_text,
-        max_tokens=50,
+        engine="davinci",
+        prompt=prompt,
+        max_tokens=60,
         n=1,
         stop=None,
         temperature=0.7,
     )
-    return response.choices[0].text
 
-# Define a function to send a reply tweet
-def send_reply_tweet(tweet, response_text):
-    api.update_status(
-        status=response_text,
-        in_reply_to_status_id=tweet.id,
-        auto_populate_reply_metadata=True,
-    )
+    return response.choices[0].text.strip()
 
-# Define the stream listener
-class MyStreamListener(tweepy.Stream):
-    def on_status(self, status):
-        if status.in_reply_to_screen_name == 'HobbleStepN':
-            response_text = generate_response(status.text)
-            send_reply_tweet(status, response_text)
 
-# Start the stream listener
-myStreamListener = MyStreamListener(api_key, api_secret, access_token, access_token_secret)
-myStreamListener.filter(track=['@HobbleStepN'])
+if __name__ == "__main__":
+    my_stream_listener = MyStreamListener()
+    my_stream = tweepy.Stream(auth=api.auth, listener=my_stream_listener)
+    my_stream.filter(track=[f"@{api.me().screen_name}"], is_async=True)
+
