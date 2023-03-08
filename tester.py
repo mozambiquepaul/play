@@ -1,66 +1,63 @@
 import os
 import tweepy
 import openai
-import re
-from tweepy import Stream
-from tweepy.streaming import Stream
+from tweepy.streaming import StreamListener
 from tweepy import OAuth2BearerHandler
 
-# Set up Twitter API authentication
-bearer_token = os.environ['TWITTER_BEARER_TOKEN']
-auth = OAuth2BearerHandler(bearer_token)
-api = tweepy.API(auth)
-
-# Set up OpenAI API authentication
 openai.api_key = os.environ['OPENAI_API_KEY']
+auth = tweepy.OAuth2BearerHandler(access_token=os.environ['TWITTER_BEARER_TOKEN'])
 
-# Define a listener for DMs
-class DMListener(tweepy.Stream):
-    def __init__(self):
-        super().__init__(auth=auth, async=True)
+# Authenticate to Twitter API
+auth = tweepy.OAuth2BearerHandler(access_token=os.environ['TWITTER_BEARER_TOKEN'])
 
-    def on_data(self, raw_data):
-        data = json.loads(raw_data)
-        if 'direct_message' in data:
-            message = data['direct_message']['text']
-            sender_id = data['direct_message']['sender_id']
-            response = generate_response(message)
-            send_direct_message(response, sender_id)
+# Connect to Twitter API
+api = tweepy.API(auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True)
 
-    def on_error(self, status_code):
-        print(f"DMListener Error: {status_code}")
-        return False
 
-# Define a listener for mentions
-class MentionListener(tweepy.Stream):
-    def __init__(self):
-        super().__init__(auth=auth, async=True)
+class MyStreamListener(tweepy.Stream):
+    def __init__(self, consumer_key, consumer_secret, access_token, access_token_secret):
+        super().__init__(
+            consumer_key,
+            consumer_secret,
+            access_token,
+            access_token_secret,
+            tweet_mode='extended'
+        )
 
-    def on_data(self, raw_data):
-        data = json.loads(raw_data)
-        if 'text' in data:
-            message = data['text']
-            sender_id = data['user']['id_str']
-            response = generate_response(message)
-            send_direct_message(response, sender_id)
+    def on_status(self, status):
+        # code to handle new tweet
 
     def on_error(self, status_code):
-        print(f"MentionListener Error: {status_code}")
-        return False
+        # code to handle errors
 
-# Define function to generate a response using OpenAI
-def generate_response(message):
-    # Add your OpenAI API code here to generate a response based on the message
-    response = "This is the response from OpenAI."
-    return response
 
-# Define function to send a direct message
-def send_direct_message(message, recipient_id):
-    api.send_direct_message(recipient_id, message)
+class DMListener(StreamListener):
+    def __init__(self):
+        super().__init__(auth=api.auth, listener=self)
 
-# Start listening for DMs and mentions
+    def on_direct_message(self, status):
+        sender_id = status.direct_message.sender_id_str
+        message = status.direct_message.text
+
+        # code to respond to DM with clown-themed response
+
+
+class MentionListener(StreamListener):
+    def __init__(self):
+        super().__init__(auth=api.auth, listener=self)
+
+    def on_status(self, status):
+        if status.user.screen_name == 'HobbleStepN':
+            message = status.text
+
+            # code to respond to mention with clown-themed response
+
+
 dm_listener = DMListener()
-dm_listener.filter(track=['@HobbleStepN'])
-
 mention_listener = MentionListener()
-mention_listener.filter(track=['@HobbleStepN'])
+
+dm_stream = tweepy.Stream(auth=auth, listener=dm_listener)
+mention_stream = tweepy.Stream(auth=auth, listener=mention_listener)
+
+dm_stream.userstream(_with='user')
+mention_stream.filter(track=['@HobbleStepN']) 
