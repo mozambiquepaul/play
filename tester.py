@@ -1,64 +1,69 @@
 import os
 import tweepy
 import openai
-from dotenv import load_dotenv
+from tweepy import OAuth2BearerHandler
+from openai import api_key
 
-load_dotenv()
+# Twitter API keys and secrets
+consumer_key = os.environ['TWITTER_CONSUMER_KEY']
+consumer_secret = os.environ['TWITTER_CONSUMER_SECRET']
+access_token = os.environ['TWITTER_ACCESS_TOKEN']
+access_token_secret = os.environ['TWITTER_ACCESS_TOKEN_SECRET']
 
-# Authenticate to Twitter API
+# OpenAI API key
+openai.api_key = os.environ['OPENAI_API_KEY']
+
+# Authenticate with Twitter API
 auth = tweepy.OAuth2BearerHandler(os.environ['TWITTER_BEARER_TOKEN'])
 api = tweepy.API(auth)
 
-# Authenticate to OpenAI API
-openai.api_key = os.environ['OPENAI_API_SECRET_KEY']
-
-
+# Define listener for stream
 class MyStreamListener(tweepy.StreamListener):
     def on_status(self, status):
-        if status.user.id != api.me().id: # Ignore tweets from self
-            tweet_id = status.id
-            username = status.user.screen_name
-            context = status.text
-
-            # Check if tweet is a mention
-            if f"@{api.me().screen_name}" in context:
-                response = generate_response(context)
-                api.update_status(
-                    status=response,
-                    in_reply_to_status_id=tweet_id,
-                    auto_populate_reply_metadata=True
-                )
-
-            # Check if tweet is a DM
-            elif status.in_reply_to_screen_name is None:
-                response = generate_response(context)
-                api.send_direct_message(
-                    recipient_id=status.user.id,
-                    text=response
-                )
-
+        # If tweet is a mention, respond with a clown-themed response
+        if status.in_reply_to_screen_name == 'HobbleStepN':
+            user_id = status.user.id_str
+            screen_name = status.user.screen_name
+            tweet_id = status.id_str
+            tweet_text = status.text.lower()
+            response = generate_response(tweet_text)
+            api.update_status(
+                status=f'@{screen_name} {response}',
+                in_reply_to_status_id=tweet_id,
+                auto_populate_reply_metadata=True
+            )
+            print(f'Responded to mention from @{screen_name}: {tweet_text}')
+            
+        # If tweet is a direct message, respond with a clown-themed response
+        elif hasattr(status, 'direct_message'):
+            user_id = status.direct_message.sender_id_str
+            screen_name = status.direct_message.sender_screen_name
+            message_id = status.direct_message.id_str
+            message_text = status.direct_message.text.lower()
+            response = generate_response(message_text)
+            api.send_direct_message(
+                recipient_id=user_id,
+                text=response
+            )
+            print(f'Responded to DM from @{screen_name}: {message_text}')
+        
     def on_error(self, status_code):
         if status_code == 420:
             return False
-
-
-def generate_response(context):
-    # Get AI-generated response
-    prompt = f"Clown responds to {context}\nClown:"
+        
+# Generate response using OpenAI API
+def generate_response(prompt):
     response = openai.Completion.create(
         engine="davinci",
         prompt=prompt,
         max_tokens=60,
         n=1,
         stop=None,
-        temperature=0.7,
+        temperature=0.5
     )
-
     return response.choices[0].text.strip()
 
-
-if __name__ == "__main__":
-    my_stream_listener = MyStreamListener()
-    my_stream = tweepy.Stream(auth=api.auth, listener=my_stream_listener)
-    my_stream.filter(track=[f"@{api.me().screen_name}"], is_async=True)
-
+# Stream tweets
+myStreamListener = MyStreamListener()
+myStream = tweepy.Stream(auth=auth, listener=myStreamListener)
+myStream.filter(track=['@HobbleStepN'], is_async=True)
