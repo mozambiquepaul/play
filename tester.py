@@ -4,45 +4,69 @@ import os
 import re
 
 # Authenticate to Twitter
-auth = tweepy.OAuth2BearerHandler(access_token=os.environ['TWITTER_ACCESS_TOKEN'])
-
-# Create API object
+bearer_token = os.environ['TWITTER_BEARER_TOKEN']
+auth = tweepy.OAuth2BearerToken(bearer_token)
 api = tweepy.API(auth)
 
 # Authenticate to OpenAI
 openai.api_key = os.environ['OPENAI_API_KEY']
 
-# Define function to generate clown-themed responses using OpenAI's GPT-3
+# Define function to generate clown-themed response using OpenAI API
 def generate_response(prompt):
     response = openai.Completion.create(
-      engine="text-davinci-002",
-      prompt=prompt,
-      max_tokens=1024,
-      n=1,
-      stop=None,
-      temperature=0.5,
+        engine="davinci",
+        prompt=prompt,
+        max_tokens=1024,
+        n=1,
+        stop=None,
+        temperature=0.5,
     )
     return response.choices[0].text.strip()
 
-# Define function to handle incoming DMs and @mentions
-class MyStreamListener(tweepy.Stream):
-    def __init__(self, api):
+# Define function to handle DMs
+class DMListener(tweepy.Stream):
+    def __init__(self):
         super().__init__(auth=api.auth, listener=self)
 
+    def on_connect(self):
+        print("Connected to Twitter API for DMs.")
+
     def on_direct_message(self, status):
-        sender_id = status.direct_message.sender_id_str
-        message_text = status.direct_message.text
-        response_text = generate_response(message_text)
-        api.send_direct_message(sender_id, response_text)
+        if status.direct_message.sender_id != api.me().id:
+            # Only respond to DMs sent by others
+            user = api.get_user(status.direct_message.sender_id)
+            screen_name = user.screen_name
+            text = status.direct_message.text
+            prompt = f"I'm a clown, {screen_name}. {text}"
+            response = generate_response(prompt)
+            api.send_direct_message(recipient_id=user.id, text=response)
+
+# Define function to handle mentions
+class MentionListener(tweepy.Stream):
+    def __init__(self):
+        super().__init__(auth=api.auth, listener=self)
+
+    def on_connect(self):
+        print("Connected to Twitter API for mentions.")
 
     def on_status(self, status):
-        if re.search(r'@HobbleStepN', status.text):
-            message_text = status.text
-            response_text = generate_response(message_text)
-            api.update_status(f"@{status.user.screen_name} {response_text}", status.id_str)
+        if status.in_reply_to_user_id == api.me().id:
+            # Only respond to mentions of my username
+            user = api.get_user(status.user.id)
+            screen_name = user.screen_name
+            text = status.text
+            prompt = f"I'm a clown, {screen_name}. {text}"
+            response = generate_response(prompt)
+            api.update_status(
+                status=response,
+                in_reply_to_status_id=status.id,
+                auto_populate_reply_metadata=True,
+            )
 
-# Set up the stream listener
-myStreamListener = MyStreamListener(api)
-myStreamListener.filter(track=['@HobbleStepN'], is_async=True)
+# Start listening for DMs and mentions
+dm_listener = DMListener()
+mention_listener = MentionListener()
+dm_listener.filter(track=["direct_message"])
+mention_listener.filter(track=["@HobbleStepN"])
 
-
+print("Listening for DMs and mentions...")
