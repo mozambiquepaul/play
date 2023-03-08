@@ -1,63 +1,103 @@
 import os
 import tweepy
 import openai
-from tweepy.streaming import StreamListener
-from tweepy import OAuth2BearerHandler
+import re
 
+# Twitter API credentials
+consumer_key = os.environ['TWITTER_CONSUMER_KEY']
+consumer_secret = os.environ['TWITTER_CONSUMER_SECRET']
+bearer_token = os.environ['TWITTER_BEARER_TOKEN']
+access_token = os.environ['TWITTER_ACCESS_TOKEN']
+access_token_secret = os.environ['TWITTER_ACCESS_TOKEN_SECRET']
+
+# OpenAI API credentials
 openai.api_key = os.environ['OPENAI_API_KEY']
-auth = tweepy.OAuth2BearerHandler(access_token=os.environ['TWITTER_BEARER_TOKEN'])
 
-# Authenticate to Twitter API
-auth = tweepy.OAuth2BearerHandler(access_token=os.environ['TWITTER_BEARER_TOKEN'])
-
-# Connect to Twitter API
+# Set up Twitter authentication
+auth = tweepy.OAuth2BearerToken(bearer_token)
 api = tweepy.API(auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True)
 
+# Set up OpenAI GPT-3
+model_engine = "text-davinci-002"
+prompt = "I am a clown, and I will respond to you with a contextual and humorous message. What would you like to know?"
 
-class MyStreamListener(tweepy.Stream):
-    def __init__(self, consumer_key, consumer_secret, access_token, access_token_secret):
-        super().__init__(
-            consumer_key,
-            consumer_secret,
-            access_token,
-            access_token_secret,
-            tweet_mode='extended'
-        )
-
-    def on_status(self, status):
-        # code to handle new tweet
-
+class DMListener(tweepy.Stream):
+    def __init__(self):
+        super().__init__(auth=api.auth, listener=self, tweet_mode='extended')
+        
     def on_error(self, status_code):
-        # code to handle errors
-
-
-class DMListener(StreamListener):
-    def __init__(self):
-        super().__init__(auth=api.auth, listener=self)
-
+        if status_code == 420:
+            print("Rate limit exceeded")
+            return False
+        
     def on_direct_message(self, status):
-        sender_id = status.direct_message.sender_id_str
-        message = status.direct_message.text
+        # Ignore messages from self
+        if status.direct_message.sender_screen_name == "HobbleStepN":
+            return
+        
+        # Get message text
+        message_text = status.direct_message.text
+        
+        # Generate response from OpenAI GPT-3
+        response = openai.Completion.create(
+            engine=model_engine,
+            prompt=prompt,
+            temperature=0.7,
+            max_tokens=60,
+            n=1,
+            stop=None,
+            prompt_context={
+                'additional_context': message_text,
+            },
+        )
+        message = response.choices[0].text.strip()
+        
+        # Send response
+        recipient_id = status.direct_message.sender_id
+        api.send_direct_message(recipient_id, message)
+        
 
-        # code to respond to DM with clown-themed response
-
-
-class MentionListener(StreamListener):
+class MentionListener(tweepy.Stream):
     def __init__(self):
-        super().__init__(auth=api.auth, listener=self)
-
+        super().__init__(auth=api.auth, listener=self, tweet_mode='extended')
+        
+    def on_error(self, status_code):
+        if status_code == 420:
+            print("Rate limit exceeded")
+            return False
+        
     def on_status(self, status):
-        if status.user.screen_name == 'HobbleStepN':
-            message = status.text
+        # Ignore tweets from self
+        if status.user.screen_name == "HobbleStepN":
+            return
+        
+        # Check if tweet mentions self
+        if re.search(r'\bHobbleStepN\b', status.text):
+            # Get message text
+            message_text = status.text
+            
+            # Generate response from OpenAI GPT-3
+            response = openai.Completion.create(
+                engine=model_engine,
+                prompt=prompt,
+                temperature=0.7,
+                max_tokens=60,
+                n=1,
+                stop=None,
+                prompt_context={
+                    'additional_context': message_text,
+                },
+            )
+            message = response.choices[0].text.strip()
+            
+            # Send response
+            recipient_id = status.user.id
+            api.update_status(status='@' + status.user.screen_name + ' ' + message, in_reply_to_status_id=status.id)
+        
 
-            # code to respond to mention with clown-themed response
-
-
-dm_listener = DMListener()
-mention_listener = MentionListener()
-
-dm_stream = tweepy.Stream(auth=auth, listener=dm_listener)
-mention_stream = tweepy.Stream(auth=auth, listener=mention_listener)
-
-dm_stream.userstream(_with='user')
-mention_stream.filter(track=['@HobbleStepN']) 
+if __name__ == '__main__':
+    dm_listener = DMListener()
+    dm_listener.userstream(_with='user')
+    
+    mention_listener = MentionListener()
+    mention_listener.filter(track=['@HobbleStepN'])
