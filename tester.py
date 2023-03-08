@@ -2,7 +2,7 @@ import os
 import tweepy
 import openai
 from tweepy import Stream, OAuth2BearerHandler
-from tweepy.streaming import StreamListener
+from tweepy import StreamListener
 
 # Twitter API credentials
 CONSUMER_KEY = os.environ.get("TWITTER_CONSUMER_KEY")
