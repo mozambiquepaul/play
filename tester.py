@@ -17,7 +17,7 @@ def generate_clown_response(input_text):
     return response.choices[0].text.strip()
 
 # Define function to handle DMs and mentions
-class ClownBot(tweepy.StreamListener):
+class ClownBot(tweepy.Stream):
     def on_direct_message(self, status):
         text = status.direct_message.text
         response_text = generate_clown_response(text)
@@ -28,7 +28,5 @@ class ClownBot(tweepy.StreamListener):
         api.update_status(f"@{status.user.screen_name} {response_text}", in_reply_to_status_id=status.id)
 
 # Create an instance of the ClownBot class and start the Tweepy stream
-bot = ClownBot()
-stream = tweepy.Stream(auth=api.auth, listener=bot)
-stream.filter(track=['@HobbleStepN'])
-
+bot = ClownBot(auth=api.auth, listener=None)
+bot.filter(track=['@HobbleStepN'])
